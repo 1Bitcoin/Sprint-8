@@ -1,10 +1,10 @@
 package com.example.retailer
 
-import com.example.retailer.adapter.DistributorPublisher
-import com.example.retailer.adapter.DistributorPublisherImpl
-import com.example.retailer.adapter.RetailerConsumer
-import com.example.retailer.adapter.RetailerConsumerImpl
 import org.springframework.amqp.core.*
+import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory
+import org.springframework.amqp.rabbit.connection.ConnectionFactory
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter
+import org.springframework.amqp.support.converter.MessageConverter
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
@@ -12,30 +12,41 @@ import org.springframework.context.annotation.Configuration
 @Configuration
 class AmqpConfiguration {
 
+    companion object {
+        const val DISTRIBUTOR_EXCHANGE  : String = "distributor_exchange"
+        const val RETAILER_QUEUE        : String = "retailer_queue"
+        const val RETAILER_NAME: String = "1Bitcoin"
+    }
+
     @Bean
-    fun distributorExchanger(): TopicExchange {
-        return TopicExchange("distributor_exchange", true, false)
+    fun distributorExchanger(): Exchange {
+        return TopicExchange(DISTRIBUTOR_EXCHANGE, true, false)
     }
 
     @Bean
     fun retailerQueue(): Queue {
-        return Queue("retailer", false, false, true)
+        return Queue(RETAILER_QUEUE, true, true, false)
     }
 
     @Bean
-    fun bindingRetailer(topic: TopicExchange, autoDeleteRetailerQueue: Queue): Binding {
-        return BindingBuilder.bind(autoDeleteRetailerQueue)
-            .to(topic)
-            .with("retailer.1Bitcoin.#")
+    fun retailerQueueBinding(): Binding {
+        return BindingBuilder
+            .bind(retailerQueue())
+            .to(distributorExchanger())
+            .with("retailer.${RETAILER_NAME}.#")
+            .noargs()
     }
 
     @Bean
-    fun consumer(): RetailerConsumer {
-        return RetailerConsumerImpl()
+    fun jsonMessageConverter(): MessageConverter {
+        return Jackson2JsonMessageConverter()
     }
 
     @Bean
-    fun publisher(): DistributorPublisher {
-        return DistributorPublisherImpl()
+    fun rabbitListenerContainerFactory(connectionFactory: ConnectionFactory): SimpleRabbitListenerContainerFactory {
+        val factory = SimpleRabbitListenerContainerFactory()
+        factory.setConnectionFactory(connectionFactory)
+        factory.setMessageConverter(jsonMessageConverter())
+        return factory
     }
 }
